@@ -1,15 +1,21 @@
 CC = gcc
-OP =  -o0
-FLAGS = -Wall -Wextra -pedantic -ggdb -Wunused-function -Wmissing-prototypes
-OBJECTS = main.o calc.o
-CFILES = main.c calc.c
 BINARY = calc
+INCDIR = ./include/
+LIBDIR = ./lib/
+FLAGS = -Wall -Wextra -pedantic -std=c99 -ggdb -Wunused-function -Wmissing-prototypes $(foreach D, $(INCDIR),-I$(D)) $(OPT)
+LDFlags=-L$(LIBDIR) -lraylib -lm
+CFILES = main.c calc.c
+OBJECTS = main.o calc.o
+OP =  -o0
 
 all: $(BINARY)
 
 $(BINARY): $(OBJECTS)
-	$(CC) $(FLAGS) -o $@ $^
+	$(CC) $(FLAGS) -o $@ $^ $(LDFlags)
 
-%.o:%.c calc.h calc_internal.h
-	$(CC) $(FLAGS) -c -o $@ $<
+%.o:%.c
+	$(CC) $(FLAGS) -c -o $@ $^
+
+clean:
+	rm -rf $(BINARY) $(OBJECTS)
 
