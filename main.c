@@ -1,145 +1,205 @@
+#include "include/raylib.h"
+#include "include/main.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <readline/readline.h>
-#include <readline/history.h>
-#include <string.h>
-#include "calc.h"
+#include "include/calc.h"
 
-#define HISTORY_SIZE 100
+int input_length = 0;
+char input[256] = "\0";
+const char *text_buttons[] = {
+  "7","8","9","DEL","AC",
+  "4","5","6","x","/",
+  "1","2","3","+","-",
+  "0",".","^","%","=",
+};
 
-char *replace_id_with_value(struct Calculator *handler, char *line);
+enum buttons {
+  delete = 3,
+  clear = 4,
+  multiply = 8,
+  divide = 9,
+  plus = 13,
+  minus = 14,
+  module = 18,
+  equal = 19,
+};
 
-/* THIS IS AN EXAMPLE ON HOW TO USE THE LIBRARY
- * nontheless it can be used as a command line calculator */
-int main(int argsc, char **argsv)
+int main()
 {
-        Calculator *calculator = init_calculator(HISTORY_SIZE);
+  Calculator *calculator = init_calculator(10);
+  InitWindow(WIDTH, HEIGHT, "minicalc");
+  SetWindowState(FLAG_WINDOW_RESIZABLE);
+  Font MonoLisa_regular = LoadFontEx("./fonts/MonoLisa-Regular.ttf", font_size, 0, 0);
+  Font MonoLisa_title = LoadFontEx("./fonts/MonoLisa-Regular.ttf", title_size, 0, 0);
+  Font MonoLisa_symbols = LoadFontEx("./fonts/MonoLisa-Regular.ttf", symbol_size, 0, 0);
 
-        if (argsc > 1)
-        {
-                double result = calculate_expr(calculator, argsv[1]);
-                if (!get_error_code(calculator))
-                        printf("%.2f\n", result);
-        }
-        else
-        {
-                char *line;
-                size_t history_len;
-                Expression **history = get_history(calculator);
+  SetTargetFPS(60);
 
-                while ((line = readline(">> ")) != NULL)
+  // Set variables
+  int w = WIDTH;
+  int h = HEIGHT;
+  float current_font_size = title_size;
+  double result;
+  float input_height = h*0.45;
+  float button_padding = 5.0f;
+  float button_width;
+  float button_height;
+  float default_char_width = MeasureTextEx(MonoLisa_title, "5", title_size, 0).x + 1;
+  float current_input_length = default_char_width;
+  float current_char_width;
+
+  uint64_t offset = 1;
+
+  // Half Top
+  Rectangle preview_box = { 0 };
+  Vector2 m_input_position = { 0 };
+
+  // Half Bottom
+  Rectangle input_box = {0};
+
+  while (!WindowShouldClose()) {
+    w = GetScreenWidth();
+    h = GetScreenHeight();
+
+    // Set sizes every frame
+    current_char_width = MeasureTextEx(MonoLisa_title, "5", current_font_size, 0).x + 1;
+    input_height = h*0.45;
+    button_padding = 5.0f;
+    button_width = (w - button_padding * 6)/5.0f;
+    button_height = (input_height - button_padding * 5)/4.0f;
+    preview_box.width = w;
+    preview_box.height = h - input_height;
+
+    m_input_position.x = w - (current_char_width*offset);
+    m_input_position.y = preview_box.height - title_size;
+    input_box.y = preview_box.height;
+    input_box.width = w;
+    input_box.height = input_height;
+
+    //Start Drawing
+    BeginDrawing();
+    ClearBackground(solarized_bg);
+    DrawTextEx(MonoLisa_title, input, m_input_position, current_font_size, 1, WHITE);
+
+    // Buttons
+    int actual_row = 0;
+    int actual_column = 0;
+    bool mouse_over = false;
+    for (int i = 1; i <= 20; i++)
+    {
+      Rectangle button = {
+        .x = (input_box.x) + actual_column *(button_width + button_padding) + button_padding,
+        .y = (input_box.y) + actual_row *(button_height + button_padding) + button_padding,
+        .width = button_width,
+        .height = button_height,
+      };
+
+      if(CheckCollisionPointRec(GetMousePosition(), button))
+      {
+          mouse_over = true;
+          if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+          {
+            int button_pressed = i-1;
+
+            // Manage buttons
+            switch (button_pressed) {
+              case delete: 
+                if(input_length)
                 {
-                        if (*line)
-                        {
-                                add_history(line);
-                                char *new_line = replace_id_with_value(calculator, line);
-                                if (new_line == NULL)
-                                {
-                                        free(line);
-                                        continue;
-                                }
+                  current_input_length = MeasureTextEx(MonoLisa_title, input, current_font_size, 0).x + 1;
+                  if(current_font_size < title_size)
+                    current_font_size += 10;
 
-                                double result = calculate_expr(calculator, new_line);
-                                history_len = get_history_len(calculator);
-
-                                if (!get_error_code(calculator))
-                                        printf("$%zu = %.2f\n",history[history_len - 1]->id, result);
-
-                                if (new_line != line)
-                                        free(new_line);
-                        }
-                        free(line);
+                  --input_length;
+                  input[input_length] = '\0';
+                  --offset;
                 }
-                if (line == NULL)
+                break;
+              case clear:
+                for (int j = 0; j < input_length; j++)
                 {
-                        free(line);
-                        printf("Exiting interactive mode...\n");
+                  input[j] = '\0'; 
                 }
-        }
-
-        destroy_calculator(calculator);
-        return 0;
-}
-
-/* shifts and replace $id with the actual value
- * this is an example of using the history, is not part of the main library
- * */
-char *replace_id_with_value(struct Calculator *handler, char *line)
-{
-        char *pos = NULL;
-        size_t offset = 0;
-        size_t len = 0;
-        char *new_line = NULL;
-
-        if ((pos = strchr(line, '$')) == NULL)
-                return line;
-
-        offset = pos - line;
-        len = strlen(line);
-
-        size_t buff_size = len * 2 + 1;
-
-        new_line = malloc(sizeof(char) * buff_size);
-        if (!new_line)
-                return NULL;
-
-        strcpy(new_line, line);
-
-        pos = new_line + offset;
-
-        while (pos)
-        {
-                size_t id;
-                size_t tail_len;
-                if (sscanf(pos + 1, "%zu", &id) == 1) 
+                current_input_length = default_char_width;
+                input_length = 0;
+                offset = 1;
+                break;
+              case equal:
+                result = calculate_expr(calculator, input);
+                sprintf(input, "%f", result);
+                break;
+              default:
+                if(input_length < 255)
                 {
-                        struct Expression *expr = get_history_by_id(handler, id);
-                        if (expr) 
-                        {
-                                char value_str[50];
-                                snprintf(value_str, sizeof(value_str), "%.2f", expr->result);
-                                size_t value_len = strlen(value_str);
-                                size_t id_len = snprintf(NULL, 0, "%zu", id);
+                  current_input_length = MeasureTextEx(MonoLisa_title, input, current_font_size, 0).x + 1;
+                  if(current_input_length >= (w - button_width))
+                    current_font_size -= 10;
 
-                                /* Checks if the buffer size is enough for containing
-                                 * the string with the replacements */
-                                while (value_len + len - id_len + 1 >= buff_size) {
-                                        buff_size *= 2;
-                                        size_t offset_pos = pos - new_line;
-                                        new_line = realloc(new_line, buff_size);
-                                        if (!new_line) {
-                                                perror("Failed to realloc memory");
-                                                exit(EXIT_FAILURE);
-                                        }
-                                        pos = new_line + offset_pos;
-                                }
-
-                                /* Shifts characters to the right to make space for the new value.
-                                 * Specifically, move characters from the position after the variable
-                                 * $id to the end of the string, to accommodate the new value.
-                                 * After shifting, replace the $id placeholder with the actual value
-                                 * */
-                                tail_len = strlen(pos + id_len + 1);
-                                memmove(pos + value_len, pos + id_len + 1, tail_len + 1);
-                                memcpy(pos, value_str, value_len);
-                                len += value_len - id_len - 1;
-                                new_line[len] = '\0';
-                                pos = pos + id_len + 1;
-                        }
-                        else 
-                        {
-                                printf("ERROR: variable $%zu not found\n", id);
-                                return NULL;
-                        }
-                        free(expr->expr);
-                        free(expr);
+                  input[input_length] = *text_buttons[i - 1];
+                  ++input_length;
+                  input[input_length] = '\0';
+                  ++offset;
                 }
-                else 
-                        return line;
+                break;
+            }
+            DrawRectangleRec(button, GRAY);
+          } else {
+            DrawRectangleRec(button, solarized_hr);
+          }
+      }
+      else
+      {
+          DrawRectangleRec(button, solarized_fg);
+      }
 
-                pos = strchr(pos, '$');
-        }
+      ++actual_column;
 
-        return new_line;
+      Vector2 text_size = MeasureTextEx(MonoLisa_regular, text_buttons[i - 1], font_size , 1);
+
+      Vector2 position = {
+        .x = button.x + (button.width - text_size.x)/2,
+        .y = button.y + (button.height - text_size.y)/2
+      };
+
+      // Buttons Text
+      int actual_button = i - 1;
+      switch (actual_button)
+      {
+        case multiply: 
+          DrawTextEx(MonoLisa_symbols, text_buttons[i - 1], position, symbol_size, 1, pink);
+          break;
+        case divide:
+          DrawTextEx(MonoLisa_symbols, text_buttons[i - 1], position, symbol_size, 1, blue);
+          break;
+        case plus:
+          DrawTextEx(MonoLisa_symbols, text_buttons[i - 1], position, symbol_size, 1, green);
+          break;
+        case minus: 
+          DrawTextEx(MonoLisa_symbols, text_buttons[i - 1], position, symbol_size, 1, yellow);
+          break;
+        case module: 
+          DrawTextEx(MonoLisa_symbols, text_buttons[i - 1], position, symbol_size, 1, gray);
+          break;
+        default:
+          DrawTextEx(MonoLisa_regular, text_buttons[i - 1], position, font_size, 1, WHITE);
+          break;
+      }
+      if(actual_column >= 5)
+      {
+        ++actual_row;
+        actual_column = 0;
+      }
+    }
+
+    if(mouse_over)
+      SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
+    else
+      SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+    EndDrawing(); 
+  }
+  destroy_calculator(calculator);
+  UnloadFont(MonoLisa_regular);
+  CloseWindow(); 
+  return 0;
 }

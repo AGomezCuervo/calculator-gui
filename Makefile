@@ -1,22 +1,21 @@
-CC = gcc 
-OP =  -o0
-FLAGS = -std=c99 -Wall -Wextra -pedantic -ggdb -Wunused-function -Wmissing-prototypes -Wunreachable-code -Wmissing-declarations -Wshadow -Wcast-align
-OBJECTS = main.o calc.o
-CFILES = main.c calc.c
+CC = gcc
 BINARY = calc
-LIBS = -lreadline
-INSTALL_PATH = /usr/local/bin
+INCDIR = ./include/
+LIBDIR = ./lib/
+FLAGS = -Wall -Wextra -pedantic -std=c99 -ggdb -Wunused-function -Wmissing-prototypes $(foreach D, $(INCDIR),-I$(D)) $(OPT)
+LDFlags=-L$(LIBDIR) -lraylib -lm
+CFILES = main.c calc.c
+OBJECTS = main.o calc.o
+OP =  -o0
 
 all: $(BINARY)
 
 $(BINARY): $(OBJECTS)
-	$(CC) $(FLAGS) -o $@ $^ $(LIBS)
+	$(CC) $(FLAGS) -o $@ $^ $(LDFlags)
 
-%.o:%.c calc.h calc_internal.h
-	$(CC) $(FLAGS) -c -o $@ $<
-
-install: $(BINARY)
-	install -m 0755 $(BINARY) $(INSTALL_PATH)
+%.o:%.c
+	$(CC) $(FLAGS) -c -o $@ $^
 
 clean:
-	rm $(BINARY) $(OBJECTS)
+	rm -rf $(BINARY) $(OBJECTS)
+
